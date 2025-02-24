@@ -32,19 +32,19 @@ def write_version_to_file(version, target_file):
 
 if __name__ == '__main__':
     version = '0.1.0+%s' % get_git_commit_number()
-    write_version_to_file(version, #VERSION_FILE)
+    write_version_to_file(version, "voxeltorch\\version.py")
 
     setup(
-        name= #PACKAGE NAME,
+        name="voxeltorch",  # PACKAGE NAME,
         version=version,
-        description= #DESC,
+        description="Voxeltorch: a toolkit of voxel operation using pytorch.",  # DESC,
         author='Uzuki Ishikawajima',
         author_email='uzukidd@gmail.com',
         license='MIT License',
-        packages=find_packages(exclude=['test']),
+        packages=find_packages(exclude=['test', 'dev']),
         # CUDA extension compilation function [Optional]
         cmdclass={
-            #'build_ext': BuildExtension,
+            # 'build_ext': BuildExtension,
         },
         ext_modules=[
             # make_cuda_ext(
