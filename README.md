@@ -1,2 +1,3 @@
-# python_package_template
-Python package template. Automatically generates a version file based on Git commit hash
+# voxeltorch
+
+Voxeltorch: a toolkit of voxel operation using pytorch.
