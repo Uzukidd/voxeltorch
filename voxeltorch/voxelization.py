@@ -27,26 +27,7 @@ def bbox_normalize(points: torch.Tensor, bbox: torch.Tensor):
     points = 2 * points / bbox
     return points
 
-
-def normalize(points: torch.Tensor, isotropic: bool = False):
-    """
-        Args:
-            points: point cloud [B, N, 3]
-            isotropic: bool
-
-        Return:
-    """
-    points_min, points_max = points.amin(dim=(0, 1)), points.amax(dim=(0, 1))
-    if isotropic:
-        points = 2 * (points - points_min) / (points_max - points_min) - 1
-    else:
-        points = 2 * (points - points_min) / \
-            (points_max - points_min).max() - 1
-
-    return points
-
-
-def tsdf2meshes(tsdf_grid: Union[torch.Tensor, np.ndarray], bbox: torch.Tensor = None):
+def tsdf2meshes(tsdf_grid: Union[torch.Tensor, np.ndarray], resolution: torch.Tensor = None):
     """
         Args:
             tsdf_grid: [B, l, w, h]
@@ -72,8 +53,8 @@ def tsdf2meshes(tsdf_grid: Union[torch.Tensor, np.ndarray], bbox: torch.Tensor =
             normals.copy()).to(tsdf_grid.device))
 
     res_meshes = Meshes(list_vertices, list_faces, verts_normals=list_normals)
-    if bbox is not None:
-        scale = Scale(bbox[0]/2, bbox[1]/2, bbox[2] /
+    if resolution is not None:
+        scale = Scale(resolution[0]/2, resolution[1]/2, resolution[2] /
                       2, device=res_meshes.device)
         new_verts = scale.transform_points(res_meshes.verts_padded())
         res_meshes = res_meshes.update_padded(new_verts)
@@ -166,6 +147,14 @@ class TSDF:
 
     #     return batch_X
 
+    @staticmethod
+    def broke_tensor(input_tensor: torch.Tensor):
+        res_tuple = tuple()
+        assert input_tensor.size().__len__() == 1
+        for i in input_tensor:
+            res_tuple += (i.item(), )
+        return res_tuple
+
     def tsdf(self, batch_meshes: Meshes):
         """
             Args:
@@ -176,26 +165,22 @@ class TSDF:
         """
         B = batch_meshes.__len__()
 
-        # batch_verts_padded = batch_meshes.verts_padded()
-        # batch_verts_padded = self.preprocess(batch_verts_padded)
-
-        # batch_meshes = Meshes(batch_verts_padded, batch_meshes.faces_padded())
-
         dense_points, dense_normals = self.meshes_sampling(
             batch_meshes, self.sampling_count)
 
         downsampled_points, downsampled_normals = self.downsampling(dense_points, dense_normals,
                                                                     self.downsampling_count)
 
-        # return downsampled_points, downsampled_normals
         meshgrid = self.generate_meshgrid(
             self.resolution, bbox=self.bbox).unsqueeze(0).expand(B, -1, -1)  # [B, l*w*h, 3]
 
-        # denormalized_meshgrid =
-
         sdf_grid = self.sample_sdf(
             meshgrid, downsampled_points, downsampled_normals)
+
+        # Convert sdf to tsdf
         tsdf_grid = sdf_grid.clamp(-self.trunated_dist, self.trunated_dist)
+
+        # Recover the shape of tsdf grid
         tsdf_grid = self.reshape_tsdf(self.resolution, tsdf_grid)
 
         return tsdf_grid
@@ -248,8 +233,7 @@ class TSDF:
                 meshgrid: [l*w*h, 3]
         """
         if isinstance(resolution, torch.Tensor):
-            assert resolution.size().__len__ == 1 and resolution.numel() == 3
-            l_res, w_res, h_res = resolution[0], resolution[1], resolution[2]
+            l_res, w_res, h_res = __class__.broke_tensor(resolution)
         else:
             l_res, w_res, h_res = resolution, resolution, resolution
 
@@ -267,8 +251,7 @@ class TSDF:
         """
         l, w, h = bbox[0], bbox[1], bbox[2]
         if isinstance(resolution, torch.Tensor):
-            assert resolution.size().__len__ == 1 and resolution.numel() == 3
-            l_res, w_res, h_res = resolution[0], resolution[1], resolution[2]
+            l_res, w_res, h_res = __class__.broke_tensor(resolution)
         else:
             l_res, w_res, h_res = resolution, resolution, resolution
 
