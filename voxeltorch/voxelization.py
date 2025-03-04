@@ -27,6 +27,7 @@ def bbox_normalize(points: torch.Tensor, bbox: torch.Tensor):
     points = 2 * points / bbox
     return points
 
+
 def tsdf2meshes(tsdf_grid: Union[torch.Tensor, np.ndarray], resolution: torch.Tensor = None):
     """
         Args:
@@ -233,7 +234,7 @@ class TSDF:
                 meshgrid: [l*w*h, 3]
         """
         if isinstance(resolution, torch.Tensor):
-            l_res, w_res, h_res = __class__.broke_tensor(resolution)
+            l_res, w_res, h_res = resolution
         else:
             l_res, w_res, h_res = resolution, resolution, resolution
 
@@ -251,7 +252,7 @@ class TSDF:
         """
         l, w, h = bbox[0], bbox[1], bbox[2]
         if isinstance(resolution, torch.Tensor):
-            l_res, w_res, h_res = __class__.broke_tensor(resolution)
+            l_res, w_res, h_res = resolution
         else:
             l_res, w_res, h_res = resolution, resolution, resolution
 
