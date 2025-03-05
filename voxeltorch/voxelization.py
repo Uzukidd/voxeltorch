@@ -6,11 +6,9 @@ import torch.nn.functional as F
 
 import pytorch3d
 from pytorch3d.ops import sample_farthest_points, sample_points_from_meshes, knn_points, knn_gather
+from pytorch3d.ops.marching_cubes import marching_cubes
 from pytorch3d.structures import Meshes
 from pytorch3d.transforms import Scale
-
-
-import skimage
 
 from typing import Union
 
@@ -28,35 +26,46 @@ def bbox_normalize(points: torch.Tensor, bbox: torch.Tensor):
     return points
 
 
-def tsdf2meshes(tsdf_grid: Union[torch.Tensor, np.ndarray], resolution: torch.Tensor = None):
+def tsdf2meshes(tsdf_grid: Union[torch.Tensor, np.ndarray], unit: torch.Tensor = None, padding:int=1, threshold:float = 0.3, engine:str="pytorch3d"):
     """
         Args:
             tsdf_grid: [B, l, w, h]
 
         Return:
     """
-    if isinstance(tsdf_grid, torch.Tensor):
-        tsdf_grid_numpy = tsdf_grid.detach().cpu().numpy()
+
+    if padding != 0:
+        tsdf_grid = F.pad(tsdf_grid, (padding, ) * 6, mode='constant', value=threshold)
 
     list_vertices = []
     list_faces = []
     list_normals = []
-    for batch_mask in range(tsdf_grid.size(0)):
-        ind_tsdf_grid = tsdf_grid_numpy[batch_mask]
-        vertices, faces, normals, _ = skimage.measure.marching_cubes(
-            ind_tsdf_grid, gradient_direction='descent', level=0)
 
-        list_vertices.append(torch.from_numpy(
-            vertices.copy()).to(tsdf_grid.device))
-        list_faces.append(torch.from_numpy(
-            faces.copy()).to(tsdf_grid.device))
-        list_normals.append(torch.from_numpy(
-            normals.copy()).to(tsdf_grid.device))
+    if engine == "skimage":
+        import skimage
+
+        if isinstance(tsdf_grid, torch.Tensor):
+            tsdf_grid_numpy = tsdf_grid.detach().cpu().numpy()
+
+        for batch_mask in range(tsdf_grid.size(0)):
+            ind_tsdf_grid = tsdf_grid_numpy[batch_mask]
+            vertices, faces, normals, _ = skimage.measure.marching_cubes(
+                ind_tsdf_grid, gradient_direction='descent', level=0) # range from [0, 0, 0] to [l, w, h]
+            list_vertices.append(torch.from_numpy(
+                vertices.copy()).to(tsdf_grid.device))
+            list_faces.append(torch.from_numpy(
+                faces.copy()).to(tsdf_grid.device))
+            list_normals.append(torch.from_numpy(
+                normals.copy()).to(tsdf_grid.device))
+    elif engine == "pytorch3d":
+        list_vertices, list_faces = marching_cubes(tsdf_grid.permute((0, 3, 2, 1)), isolevel=0.0, return_local_coords=False)
+        list_normals = None
+    else:
+        raise NotImplementedError
 
     res_meshes = Meshes(list_vertices, list_faces, verts_normals=list_normals)
-    if resolution is not None:
-        scale = Scale(resolution[0]/2, resolution[1]/2, resolution[2] /
-                      2, device=res_meshes.device)
+    if unit is not None:
+        scale = Scale(*unit, device=res_meshes.device)
         new_verts = scale.transform_points(res_meshes.verts_padded())
         res_meshes = res_meshes.update_padded(new_verts)
 
@@ -162,7 +171,7 @@ class TSDF:
                 batch_meshes: Meshes
 
             Return:
-
+                tsdf_grid: [B, L, W, H]
         """
         B = batch_meshes.__len__()
 
@@ -261,7 +270,7 @@ class TSDF:
             torch.linspace(-w/2, w/2, w_res),
             torch.linspace(-h/2, h/2, h_res),
             indexing="ij"
-        ), dim=-1).view(-1, 3)
+        ), dim=-1).view(-1, 3).to(bbox.device)
 
         return meshgrid
 
