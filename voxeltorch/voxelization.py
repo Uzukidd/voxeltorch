@@ -271,7 +271,6 @@ class TSDF:
             torch.linspace(-h/2, h/2, h_res),
             indexing="ij"
         ), dim=-1).view(-1, 3).to(bbox.device)
-
         return meshgrid
 
     @staticmethod
